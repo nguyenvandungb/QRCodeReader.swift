@@ -73,16 +73,16 @@ final public class QRCodeReaderView: UIView, QRCodeReaderDisplayable {
 
   private weak var reader: QRCodeReader?
 
-  public func setupComponents(with builder: QRCodeReaderViewControllerBuilder) {
-    self.reader               = builder.reader
+  public func setupComponents(showCancelButton: Bool, showSwitchCameraButton: Bool, showTorchButton: Bool, showOverlayView: Bool, reader: QRCodeReader?) {
+    self.reader               = reader
     reader?.lifeCycleDelegate = self
 
     addComponents()
 
-    cancelButton?.isHidden       = !builder.showCancelButton
-    switchCameraButton?.isHidden = !builder.showSwitchCameraButton
-    toggleTorchButton?.isHidden  = !builder.showTorchButton
-    overlayView?.isHidden        = !builder.showOverlayView
+    cancelButton?.isHidden       = !showCancelButton
+    switchCameraButton?.isHidden = !showSwitchCameraButton
+    toggleTorchButton?.isHidden  = !showTorchButton
+    overlayView?.isHidden        = !showOverlayView
 
     guard let cb = cancelButton, let scb = switchCameraButton, let ttb = toggleTorchButton, let ov = overlayView else { return }
 
@@ -90,7 +90,7 @@ final public class QRCodeReaderView: UIView, QRCodeReaderDisplayable {
 
     addConstraints(NSLayoutConstraint.constraints(withVisualFormat: "H:|[cv]|", options: [], metrics: nil, views: views))
 
-    if builder.showCancelButton {
+    if showCancelButton {
       addConstraints(NSLayoutConstraint.constraints(withVisualFormat: "V:|[cv][cb(40)]|", options: [], metrics: nil, views: views))
       addConstraints(NSLayoutConstraint.constraints(withVisualFormat: "H:|-[cb]-|", options: [], metrics: nil, views: views))
     }
@@ -98,22 +98,18 @@ final public class QRCodeReaderView: UIView, QRCodeReaderDisplayable {
       addConstraints(NSLayoutConstraint.constraints(withVisualFormat: "V:|[cv]|", options: [], metrics: nil, views: views))
     }
 
-    if builder.showSwitchCameraButton {
+    if showSwitchCameraButton {
       addConstraints(NSLayoutConstraint.constraints(withVisualFormat: "V:|-[scb(50)]", options: [], metrics: nil, views: views))
       addConstraints(NSLayoutConstraint.constraints(withVisualFormat: "H:[scb(70)]|", options: [], metrics: nil, views: views))
     }
 
-    if builder.showTorchButton {
+    if showTorchButton {
       addConstraints(NSLayoutConstraint.constraints(withVisualFormat: "V:|-[ttb(50)]", options: [], metrics: nil, views: views))
       addConstraints(NSLayoutConstraint.constraints(withVisualFormat: "H:|[ttb(70)]", options: [], metrics: nil, views: views))
     }
 
     for attribute in Array<NSLayoutConstraint.Attribute>([.left, .top, .right, .bottom]) {
       addConstraint(NSLayoutConstraint(item: ov, attribute: attribute, relatedBy: .equal, toItem: cameraView, attribute: attribute, multiplier: 1, constant: 0))
-    }
-
-    if let readerOverlayView = overlayView as? ReaderOverlayView {
-      readerOverlayView.rectOfInterest = builder.rectOfInterest
     }
   }
 
@@ -126,7 +122,7 @@ final public class QRCodeReaderView: UIView, QRCodeReaderDisplayable {
   // MARK: - Scan Result Indication
 
   func startTimerForBorderReset() {
-    DispatchQueue.main.asyncAfter(deadline: .now() + .seconds(1)) {
+    DispatchQueue.main.asyncAfter(deadline: DispatchTime.now() + .seconds(1)) {
       if let ovl = self.overlayView as? ReaderOverlayView {
         ovl.overlayColor = .white
       }

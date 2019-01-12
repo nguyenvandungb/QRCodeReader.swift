@@ -29,12 +29,16 @@ import AVFoundation
 
 /// Convenient controller to display a view to scan/read 1D or 2D bar codes like the QRCodes. It is based on the `AVFoundation` framework from Apple. It aims to replace ZXing or ZBar for iOS 7 and over.
 public class QRCodeReaderViewController: UIViewController {
-  private let builder: QRCodeReaderViewControllerBuilder
-
   /// The code reader object used to scan the bar code.
-  public var codeReader: QRCodeReader {
-    return builder.reader
-  }
+  public let codeReader: QRCodeReader
+
+  let readerView: QRCodeReaderContainer
+  let startScanningAtLoad: Bool
+  let showCancelButton: Bool
+  let showSwitchCameraButton: Bool
+  let showTorchButton: Bool
+  let showOverlayView: Bool
+  let customPreferredStatusBarStyle: UIStatusBarStyle?
 
   // MARK: - Managing the Callback Responders
 
@@ -58,7 +62,14 @@ public class QRCodeReaderViewController: UIViewController {
    - parameter builder: A QRCodeViewController builder object.
    */
   required public init(builder: QRCodeReaderViewControllerBuilder) {
-    self.builder = builder
+    readerView                    = builder.readerView
+    startScanningAtLoad           = builder.startScanningAtLoad
+    codeReader                    = builder.reader
+    showCancelButton              = builder.showCancelButton
+    showSwitchCameraButton        = builder.showSwitchCameraButton
+    showTorchButton               = builder.showTorchButton
+    showOverlayView               = builder.showOverlayView
+    customPreferredStatusBarStyle = builder.preferredStatusBarStyle
 
     super.init(nibName: nil, bundle: nil)
 
@@ -66,7 +77,7 @@ public class QRCodeReaderViewController: UIViewController {
 
     codeReader.didFindCode = { [weak self] resultAsObject in
       if let weakSelf = self {
-        if let qrv = builder.readerView.displayable as? QRCodeReaderView {
+        if let qrv = weakSelf.readerView.displayable as? QRCodeReaderView {
           qrv.addGreenBorder()
         }
         weakSelf.completionBlock?(resultAsObject)
@@ -74,9 +85,11 @@ public class QRCodeReaderViewController: UIViewController {
       }
     }
 
-    codeReader.didFailDecoding = {
-      if let qrv = builder.readerView.displayable as? QRCodeReaderView {
-        qrv.addRedBorder()
+    codeReader.didFailDecoding = { [weak self] in
+      if let weakSelf = self {
+        if let qrv = weakSelf.readerView.displayable as? QRCodeReaderView {
+          qrv.addRedBorder()
+        }
       }
     }
 
@@ -84,7 +97,14 @@ public class QRCodeReaderViewController: UIViewController {
   }
 
   required public init?(coder aDecoder: NSCoder) {
-    self.builder = QRCodeReaderViewControllerBuilder()
+    codeReader                    = QRCodeReader()
+    readerView                    = QRCodeReaderContainer(displayable: QRCodeReaderView())
+    startScanningAtLoad           = false
+    showCancelButton              = false
+    showTorchButton               = false
+    showSwitchCameraButton        = false
+    showOverlayView               = false
+    customPreferredStatusBarStyle = nil
 
     super.init(coder: aDecoder)
   }
@@ -94,8 +114,8 @@ public class QRCodeReaderViewController: UIViewController {
   override public func viewWillAppear(_ animated: Bool) {
     super.viewWillAppear(animated)
 
-    if builder.startScanningAtLoad {
-      builder.readerView.displayable.setNeedsUpdateOrientation()
+    if startScanningAtLoad {
+      readerView.displayable.setNeedsUpdateOrientation()
 
       startScanning()
     }
@@ -114,35 +134,38 @@ public class QRCodeReaderViewController: UIViewController {
   }
 
   public override var preferredStatusBarStyle: UIStatusBarStyle {
-    return builder.preferredStatusBarStyle ?? super.preferredStatusBarStyle
+    return customPreferredStatusBarStyle ?? super.preferredStatusBarStyle
   }
 
   // MARK: - Initializing the AV Components
 
   private func setupUIComponentsWithCancelButtonTitle(_ cancelButtonTitle: String) {
-    view.addSubview(builder.readerView.view)
+    view.addSubview(readerView.view)
 
-    builder.readerView.view.translatesAutoresizingMaskIntoConstraints = false
-    builder.readerView.setupComponents(with: builder)
+    let sscb = showSwitchCameraButton && codeReader.hasFrontDevice
+    let stb  = showTorchButton && codeReader.isTorchAvailable
+
+    readerView.view.translatesAutoresizingMaskIntoConstraints = false
+    readerView.setupComponents(showCancelButton: showCancelButton, showSwitchCameraButton: sscb, showTorchButton: stb, showOverlayView: showOverlayView, reader: codeReader)
 
     // Setup action methods
 
-    builder.readerView.displayable.switchCameraButton?.addTarget(self, action: #selector(switchCameraAction), for: .touchUpInside)
-    builder.readerView.displayable.toggleTorchButton?.addTarget(self, action: #selector(toggleTorchAction), for: .touchUpInside)
-    builder.readerView.displayable.cancelButton?.setTitle(cancelButtonTitle, for: .normal)
-    builder.readerView.displayable.cancelButton?.addTarget(self, action: #selector(cancelAction), for: .touchUpInside)
+    readerView.displayable.switchCameraButton?.addTarget(self, action: #selector(switchCameraAction), for: .touchUpInside)
+    readerView.displayable.toggleTorchButton?.addTarget(self, action: #selector(toggleTorchAction), for: .touchUpInside)
+    readerView.displayable.cancelButton?.setTitle(cancelButtonTitle, for: .normal)
+    readerView.displayable.cancelButton?.addTarget(self, action: #selector(cancelAction), for: .touchUpInside)
 
     // Setup constraints
 
     for attribute in [.left, .top, .right] as [NSLayoutConstraint.Attribute] {
-        NSLayoutConstraint(item: builder.readerView.view, attribute: attribute, relatedBy: .equal, toItem: view, attribute: attribute, multiplier: 1, constant: 0).isActive = true
+        NSLayoutConstraint(item: readerView.view, attribute: attribute, relatedBy: .equal, toItem: view, attribute: attribute, multiplier: 1, constant: 0).isActive = true
     }
     
     if #available(iOS 11.0, *) {
-        view.safeAreaLayoutGuide.bottomAnchor.constraint(equalTo: builder.readerView.view.bottomAnchor).isActive = true
+        view.safeAreaLayoutGuide.bottomAnchor.constraint(equalTo: readerView.view.bottomAnchor).isActive = true
     }
     else {
-        NSLayoutConstraint(item: builder.readerView.view, attribute: .bottom, relatedBy: .equal, toItem: view, attribute: .bottom, multiplier: 1, constant: 0).isActive = true
+        NSLayoutConstraint(item: readerView.view, attribute: .bottom, relatedBy: .equal, toItem: view, attribute: .bottom, multiplier: 1, constant: 0).isActive = true
     }
   }
 
